@@ -31,7 +31,7 @@ Note: 此 Guide 为中国区目前部署 stable diffusion quick kit 的部署文
 Note: SAM框架会使用 ``sagemaker-<region-code>-xxx`` 的桶，并生成 bucket policy，此policy会覆盖原有的。如果bucket原本就有bucket policy，请先复制出来，之后再append过去
 
 1. 安装部署，请参考[此链接](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-getting-started.html)
-2. 到 lambda 指定目录下 ,执行 sam 命令    
+2. 到 lambda 指定目录下 ,执行 sam 命令   (需要在lambda 这个路径下执行, lambda代码来自 lambda-stable-diffusion/，container/ 这个folder 暂时没有用到)   
   ````
   cd inference/lambda
   sam build
