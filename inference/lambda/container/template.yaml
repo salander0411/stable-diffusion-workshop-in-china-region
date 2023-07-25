@@ -1,0 +1,195 @@
+AWSTemplateFormatVersion : '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  DDBTableName:
+    Type: String
+    Default: 'AIGC_CONFIG'
+  S3PREFIX:
+    Type: String
+    Default: 'stablediffusion/asyncinvoke'
+  CloudfrontCNAME:
+    Type: String
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: aigc-day-stable-diffusion-china
+    Description: AIGC Day Workshop Stable Diffusion App in China
+    SpdxLicenseId: Apache-2.0
+    LicenseUrl: LICENSE
+    ReadmeUrl: README.md
+    Labels: ['AIGC']
+
+Resources:
+  DDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DDBTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: "PK"
+          AttributeType: "S"
+        - AttributeName: "SM_ENDPOINT"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "PK"
+          KeyType: "HASH"
+        - AttributeName: "SM_ENDPOINT"
+          KeyType: "RANGE"
+  InvokeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Architectures:
+        - x86_64
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            PayloadFormatVersion: "1.0"
+            Path: /{proxy+}
+            Method: any
+      Timeout: 200
+      Environment:
+        Variables:
+          SM_REGION: !Sub '${AWS::Region}'
+          S3_BUCKET: !Sub "sagemaker-${AWS::Region}-${AWS::AccountId}"
+          S3_PREFIX: !Ref S3PREFIX
+          DDB_TABLE: !Ref DDBTableName
+      Policies:
+        # Give the Lambda service access to poll your S3, SageMaker, DynamoDB
+        - AWSLambdaExecute
+        - AmazonS3FullAccess
+        - AmazonSageMakerFullAccess
+        - AmazonDynamoDBFullAccess
+    Metadata:
+      Dockerfile: Dockerfile
+      DockerContext: ./
+      DockerTag: aigc-app
+
+##########################################################################
+#  CloudFront::Distribution                                              #
+##########################################################################
+  OriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: "AIGC OAI"
+  SageMakerDefaultBucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Sub "sagemaker-${AWS::Region}-${AWS::AccountId}"
+      PolicyDocument:
+        Statement:
+        - Action: "s3:Get*"
+          Effect: Allow
+          Resource: !Sub "arn:aws-cn:s3:::sagemaker-${AWS::Region}-${AWS::AccountId}/*"
+          Principal:
+            CanonicalUser: !GetAtt OriginAccessIdentity.S3CanonicalUserId
+
+  CloudfrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        PriceClass: PriceClass_All
+        IPV6Enabled: false
+        HttpVersion: http2
+        Origins:
+          - Id: APIOrigin
+            DomainName: !Sub "${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com.cn"
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+          - Id: S3Origin
+            DomainName: !Sub "sagemaker-${AWS::Region}-${AWS::AccountId}.s3.${AWS::Region}.amazonaws.com.cn"
+            S3OriginConfig:
+              OriginAccessIdentity: !Join [ "", [ "origin-access-identity/cloudfront/", !Ref OriginAccessIdentity ] ]
+        Aliases:
+          - Ref: CloudfrontCNAME
+        Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          ViewerProtocolPolicy: allow-all
+          TargetOriginId: APIOrigin
+          DefaultTTL: 0
+          MinTTL: 0
+          MaxTTL: 0
+          ForwardedValues:
+            Cookies:
+              Forward: none
+            QueryString: false
+        CacheBehaviors:
+          - PathPattern: "/stablediffusion/*"
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            Compress: true
+            ViewerProtocolPolicy: allow-all
+            TargetOriginId: S3Origin
+            DefaultTTL: 10800
+            MinTTL: 10800
+            MaxTTL: 10800
+            ForwardedValues:
+              Cookies:
+                Forward: none
+              Headers:
+                - "x-forwarded-for"
+              QueryString: true
+              QueryStringCacheKeys:
+                - "allowed_query_string_param"
+          - PathPattern: "/aigc/*"
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            Compress: true
+            ViewerProtocolPolicy: allow-all
+            TargetOriginId: S3Origin
+            #CachePolicyId: !Ref 3hCachePolicy
+            DefaultTTL: 10800
+            MinTTL: 10800
+            MaxTTL: 10800
+            ForwardedValues:
+              Cookies:
+                Forward: none
+              Headers:
+                - "x-forwarded-for"
+              QueryString: true
+              QueryStringCacheKeys:
+                - "allowed_query_string_param"
+          - PathPattern: "/task/*"
+            AllowedMethods:
+              - GET
+              - HEAD
+            Compress: true
+            ViewerProtocolPolicy: allow-all
+            TargetOriginId: APIOrigin
+            DefaultTTL: 0
+            MinTTL: 0
+            MaxTTL: 0
+            ForwardedValues:
+              Cookies:
+                Forward: none
+              QueryString: false
+
+Outputs:
+  DistributionDomainName:
+    Description: "Distribution domain name"
+    Value: !GetAtt CloudfrontDistribution.DomainName
+  InvokeApi:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com.cn"

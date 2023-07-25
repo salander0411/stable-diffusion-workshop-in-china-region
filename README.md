@@ -21,7 +21,7 @@ Note: 此 Guide 为中国区目前部署 stable diffusion quick kit 的部署文
 3. 在sagemaker里 ``cd inference/sagemaker/byos/``，选择 `stablediffusion_sagemaker_byos.zh.ipynb`   
    ![](inference/images/sagemaker-tab.png)
 
-4. 启动 notebook 之后根据提示执行 stablediffusion_sagemaker_byos.zh.ipynb 中的代码，直到 2.4 部署 endpoint 为止。（ 执行代码时，需要先点击代码框使代码框获得焦点，然后点击顶部菜单栏的运行按钮即可，执行后会自动打印输出。）   
+4. 启动 notebook 之后, 将 Kernel设置为 ``conda_python3``, 根据提示执行 stablediffusion_sagemaker_byos.zh.ipynb 中的代码，直到 2.4 部署 endpoint 为止。（ 执行代码时，需要先点击代码框使代码框获得焦点，然后点击顶部菜单栏的运行按钮即可，执行后会自动打印输出。）   
    ![](inference/images/2.4-deploy-endpoint.png)
 5. 检查 sagemaker 中 endpoint 的生成    
    ![](inference/images/sagemaker-endpoint.png)
@@ -37,7 +37,26 @@ Note: SAM框架会使用 ``sagemaker-<region-code>-xxx`` 的桶，并生成 buck
   sam build
   sam deploy --guided
   ````
-3. 在交互式会话中，输入cloudfront CNAME（必需步骤），其他均可采用默认值
+3. 在交互式会话中，输入cloudfront CNAME（必需步骤），其他参考值如下, 如接受默认值直接回车即可
+```
+	Stack Name [stable-diffusion]: 
+	AWS Region [cn-north-1]: 
+	Parameter DDBTableName [AIGC_CONFIG]: 
+	Parameter S3PREFIX [stablediffusion/asyncinvoke]: 
+	Parameter CloudfrontCNAME []: <这里需要填写备案过后的一个二级域名> 
+	#Shows you resources changes to be deployed and require a 'Y' to initiate deploy
+	Confirm changes before deploy [Y/n]: Y
+	#SAM needs permission to be able to create roles to connect to the resources in your template
+	Allow SAM CLI IAM role creation [Y/n]: Y
+	#Preserves the state of previously provisioned resources when an operation fails
+	Disable rollback [y/N]: y
+	InvokeFunction has no authentication. Is this okay? [y/N]: y
+	Save arguments to configuration file [Y/n]: 
+	SAM configuration file [samconfig.toml]: 
+	SAM configuration environment [default]: 
+
+```
+
 4. 等待部署完毕。在 Route53 中配置添加 record， 将填入的CNAME 指向 Cloudfront 生成的 xxx.cloudfront.cn 地址
 
 ### 2.3 前端部署
@@ -68,3 +87,5 @@ npm build run
 
 ## 5. 已知限制
 1. 同步推理需要等待response，而API Gateway 30s timeout,  因此取决于最大生成image数， Lambda 和 Sagemaker inference instance type 的大小需要做相应调整，否则会引起API接口 timeout无法显示的情况
+2. 目前所有的请求是直接传到 Lambda和sagemaker endpoint 做处理的，如果用户大量并行执行，可能会存在并发问题。
+3. sagemaker 底层模型是支持 ControlNet 以图生图的， 但由于license限制，目前 UI 暂不支持 controlNet。

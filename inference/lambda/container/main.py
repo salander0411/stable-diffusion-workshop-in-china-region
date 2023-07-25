@@ -38,26 +38,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-'''
+
 CURRENT_REGION= boto3.session.Session().region_name
 SM_REGION=os.environ.get("SM_REGION") if os.environ.get("SM_REGION")!="" else CURRENT_REGION
 SM_ENDPOINT=os.environ.get("SM_ENDPOINT",None) #SM_ENDPORT NAME
 S3_BUCKET=os.environ.get("S3_BUCKET","")
-'''
-
-SM_REGION = "cn-north-1"
-CURRENT_REGION = "cn-north-1"
-SM_ENDPOINT= "AIGC-Quick-Kit-97700bc1-aee2-4e9e-a5af-e7d302e6bfea"
-S3_BUCKET= "sagemaker-cn-north-1-287439122014"
-
-
 
 S3_PREFIX=os.environ.get("S3_PREFIX","stablediffusion/asyncinvoke")
 
 DDB_TABLE=os.environ.get("DDB_TABLE","") #dynamodb table name
-
-
-
 
 
 print(f"CURRENT_REGION |{CURRENT_REGION}|")
@@ -218,40 +207,40 @@ def async_handler(prompt: Prompt, request: Request):
 
     if sm_endpoint is None :
         raise Exception("Not found SageMaker")
+    input_body = json.loads(body.replace("\'", "\""))
+
     
     try:
         response = sagemaker_runtime.invoke_endpoint (
                 EndpointName=sm_endpoint,
                 ContentType = "application/json",
-                Body= body
+                Body= json.dumps(input_body)
                 )
-        print(response['Body'].read().decode('utf-8'))
+        print("invoke_endpoint")
+        output_image_array = response['Body'].read().decode('utf-8')
+        print('output_image_arry', output_image_array)
+
     except ClientError as error:
         print(error)
         return {"msg":"invoke error"}
 
     try:
-        output_image_array= response['Body'].read().decode('utf-8')
-        images=output_image_array['result']
+        images = json.loads(output_image_array)['result']
         images=[x.replace(f"s3://{S3_BUCKET}",f"") for x in images]
         print('async_hander end')
-        return {"status":"completed", "images":images}
+        return {"status":200, "images":images}
     except ClientError as error:
         print(error)
         return {"status":502}
 
     #return response["ResponseMetadata"]["HTTPStatusCode"], response['Body'].read().decode('utf-8')
-    # return 200, {"result": ["s3://sagemaker-cn-north-1-287439122014/stablediffusion/asyncinvoke/images/17a5ee6d-7bf7-41ac-a110-e07486463ea4.jpg"]} 
-
-
+    #return 200, {"result": ["s3://sagemaker-cn-north-1-xxx/stablediffusion/asyncinvoke/images/17a5ee6d-7bf7-41ac-a110-e07486463ea4.jpg"]}
     #status_code=200 if status_code==202 else 403
     
-    # return {"task_id":os.path.basename(output_location).split('.')[0]}  # 这个地方直接把output location传给它
+    # return {"task_id":os.path.basename(output_location).split('.')[0]}
     # 示例输出 return {"task_id":os.path.basename(output_location).split('.')[0]}
 
     #{'task_id': '4a4a2ebb-927c-4ab6-a310-87192ca3fdf3'}  是写images output输出位置的json文件
-
-
 
 
 @app.get("/config")
