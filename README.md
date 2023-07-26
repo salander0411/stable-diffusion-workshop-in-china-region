@@ -89,3 +89,4 @@ npm build run
 1. 同步推理需要等待response，而API Gateway 30s timeout,  因此取决于最大生成image数， Lambda 和 Sagemaker inference instance type 的大小需要做相应调整，否则会引起API接口 timeout无法显示的情况
 2. 目前所有的请求是直接传到 Lambda和sagemaker endpoint 做处理的，如果用户大量并行执行，可能会存在并发问题。
 3. sagemaker 底层模型是支持 ControlNet 以图生图的， 但由于license限制，目前 UI 暂不支持 controlNet。
+
